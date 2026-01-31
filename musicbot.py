@@ -1,89 +1,76 @@
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     MessageHandler,
-    CallbackQueryHandler,
     ContextTypes,
+    CallbackQueryHandler,
     filters
 )
 import os
-import subprocess
-import re
+import yt_dlp
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+seen_users = set()
 
-# -------- Helpers --------
+# --- YouTube search function ---
+def search_youtube(query, limit=5):
+    ydl_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "extract_flat": True
+    }
 
-def clean_title(title: str) -> str:
-    title = re.sub(r"\(.*?\)|\[.*?\]", "", title)
-    title = re.sub(
-        r"official|video|lyrical|audio|song|tamil|movie",
-        "",
-        title,
-        flags=re.I
-    )
-    return title.strip().title()
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+        return info.get("entries", [])
 
-def get_movie_songs(movie: str, limit=6):
-    query = f"ytsearch15:{movie} movie songs"
-    cmd = ["yt-dlp", "--get-title", query]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    songs, seen = [], set()
-    for t in result.stdout.splitlines():
-        name = clean_title(t)
-        if name and name not in seen:
-            seen.add(name)
-            songs.append(name)
-        if len(songs) >= limit:
-            break
-    return songs
-
-# -------- Handlers --------
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    movie = update.message.text.strip()
-    await update.message.reply_text("🔎 Finding movie songs…")
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
 
-    songs = get_movie_songs(movie)
+    # Welcome message (once per user)
+    if user_id not in seen_users:
+        seen_users.add(user_id)
+        await update.message.reply_text(
+            "👋 Welcome to Tamil Music Bot\n\n"
+            "Type movie or song name to get the MP3 files 🎧"
+        )
 
-    if not songs:
-        await update.message.reply_text("❌ No songs found.")
+    await update.message.reply_text("🔎 Finding songs...")
+
+    results = search_youtube(text)
+
+    if not results:
+        await update.message.reply_text("❌ No results found")
         return
 
     buttons = []
-    for song in songs:
+    for video in results:
+        title = video.get("title", "Unknown")
+        video_id = video.get("id")
         buttons.append(
-            [InlineKeyboardButton(f"🎵 {song}", callback_data=f"{movie}|{song}")]
+            [InlineKeyboardButton(title[:50], callback_data=video_id)]
         )
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
     await update.message.reply_text(
-        f"🎬 *{movie.title()} – Movie Songs*",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
+        "🎵 Select a song:",
+        reply_markup=reply_markup
     )
+
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    data = update.callback_query.data
-    movie, song = data.split("|", 1)
-
-    await update.callback_query.message.reply_text(
-        f"⏬ Downloading: *{song}*\n\n(MP3 coming next)",
-        parse_mode="Markdown"
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "⬇️ Download feature coming next step 😄"
     )
 
-# -------- App --------
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 app.add_handler(CallbackQueryHandler(handle_button))
 
-print("🎧 Tamil Music Bot Running (Buttons Mode)...")
 app.run_polling()
