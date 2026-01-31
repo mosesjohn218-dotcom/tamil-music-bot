@@ -1,22 +1,31 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 import yt_dlp
-import os
-import asyncio
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+import re
 
-async def search_youtube(query: str):
-    ydl_opts = {
-        "quiet": True,
-        "extract_flat": True,
-        "skip_download": True,
-    }
+def clean_title(title: str):
+    title = title.lower()
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch5:{query} tamil song", download=False)
-        return info.get("entries", [])
+    # Remove common junk words
+    junk_words = [
+        "video", "lyric", "lyrics", "song", "jukebox",
+        "hd", "official", "audio", "music", "full",
+        "thalapathy", "vijay", "anirudh", "sony", "t-series"
+    ]
 
+    for word in junk_words:
+        title = title.replace(word, "")
+
+    # Remove brackets and pipes
+    title = re.sub(r"\(.*?\)", "", title)
+    title = re.sub(r"\|.*", "", title)
+
+    # Normalize separators
+    title = title.replace("-", " ")
+    title = re.sub(r"\s+", " ", title)
+
+    return title.strip().title()
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
