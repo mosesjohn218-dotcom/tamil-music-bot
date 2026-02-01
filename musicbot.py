@@ -35,12 +35,12 @@ def search_youtube(query):
         "quiet": True,
         "skip_download": True,
         "extract_flat": "in_playlist",
-        "default_search": "ytsearch5",
+        "default_search": "ytsearch10",
         "source_address": "0.0.0.0"
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch5:{query}", download=False)
+        info = ydl.extract_info(f"ytsearch10:{query}", download=False)
         return info.get("entries", [])
 
 # ---------- MAIN ----------
