@@ -15,8 +15,7 @@ def clean_title(title: str):
 
     junk_words = [
         "video", "lyric", "lyrics", "song", "jukebox",
-        "hd", "official", "audio", "music", "full",
-        "thalapathy", "vijay", "anirudh", "sony", "t-series"
+        "hd", "official", "audio", "music", "full"
     ]
 
     for word in junk_words:
@@ -24,7 +23,6 @@ def clean_title(title: str):
 
     title = re.sub(r"\(.*?\)", "", title)
     title = re.sub(r"\|.*", "", title)
-
     title = title.replace("-", " ")
     title = re.sub(r"\s+", " ", title)
 
@@ -32,15 +30,17 @@ def clean_title(title: str):
 
 # ---------- YOUTUBE SEARCH ----------
 def search_youtube(query):
+
     ydl_opts = {
         "quiet": True,
         "skip_download": True,
-        "extract_flat": True,
-        "default_search": "ytsearch5"
+        "extract_flat": "in_playlist",
+        "default_search": "ytsearch5",
+        "source_address": "0.0.0.0"
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(query, download=False)
+        info = ydl.extract_info(f"ytsearch5:{query}", download=False)
         return info.get("entries", [])
 
 # ---------- MAIN ----------
