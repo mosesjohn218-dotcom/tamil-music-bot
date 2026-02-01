@@ -1,4 +1,3 @@
-import asyncio
 import os
 import re
 import yt_dlp
@@ -10,7 +9,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 seen_users = set()
 
-# ---------- TITLE CLEANER ----------
+# ---------- CLEAN TITLE ----------
 def clean_title(title: str):
     title = title.lower()
 
@@ -32,7 +31,7 @@ def clean_title(title: str):
     return title.strip().title()
 
 # ---------- YOUTUBE SEARCH ----------
-async def search_youtube(query):
+def search_youtube(query):
     ydl_opts = {
         "quiet": True,
         "skip_download": True,
@@ -44,12 +43,11 @@ async def search_youtube(query):
         info = ydl.extract_info(query, download=False)
         return info.get("entries", [])
 
-# ---------- MAIN HANDLER ----------
+# ---------- MAIN ----------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Welcome message once
     if user_id not in seen_users:
         seen_users.add(user_id)
         await update.message.reply_text(
@@ -61,11 +59,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = f"{text} tamil movie song"
 
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        None,
-        lambda: asyncio.run(search_youtube(query))
-    )
+    results = search_youtube(query)
 
     if not results:
         await update.message.reply_text("❌ No songs found.")
@@ -92,7 +86,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# ---------- APP START ----------
+# ---------- RUN ----------
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
