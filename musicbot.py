@@ -27,41 +27,46 @@ def clean_title(title: str):
 
     return title.strip().title()
 
-# ---------- Playlist Search ----------
-def search_album(query):
+# ---------- Smart Search ----------
+def smart_search(query):
     ydl_opts = {
         "quiet": True,
         "extract_flat": True,
         "skip_download": True
     }
 
-    search_query = f"ytsearch1:{query} full album jukebox official"
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
+        # try album playlist first
+        playlist_query = f"ytsearch1:{query} full album jukebox official"
+        info = ydl.extract_info(playlist_query, download=False)
+
+        if info and "entries" in info and info["entries"]:
+            first = info["entries"][0]
+
+            if "entries" in first:
+                return first["entries"][:10]
+
+        # fallback normal search
+        search_query = f"ytsearch10:{query} songs"
         info = ydl.extract_info(search_query, download=False)
 
-        if not info or "entries" not in info:
-            return []
+        if info and "entries" in info:
+            return info["entries"]
 
-        first = info["entries"][0]
-
-        # If playlist found
-        if "entries" in first:
-            return first["entries"][:10]
-
-        return []
+    return []
 
 # ---------- Telegram Handler ----------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
 
-    await update.message.reply_text("🔍 Finding movie album...")
+    await update.message.reply_text("🔍 Searching songs...")
 
     loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(None, lambda: search_album(query))
+    results = await loop.run_in_executor(None, lambda: smart_search(query))
 
     if not results:
-        await update.message.reply_text("❌ Album not found.")
+        await update.message.reply_text("❌ No songs found.")
         return
 
     buttons = []
