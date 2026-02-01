@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 import yt_dlp
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -7,74 +8,73 @@ from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filte
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-seen_users = set()
-
-# ---------- CLEAN TITLE ----------
+# ---------- Title Cleaner ----------
 def clean_title(title: str):
     title = title.lower()
 
-    junk_words = [
-        "video", "lyric", "lyrics", "song", "jukebox",
-        "hd", "official", "audio", "music", "full"
+    junk = [
+        "official", "video", "lyrics", "lyric",
+        "hd", "audio", "jukebox", "full",
+        "song", "music"
     ]
 
-    for word in junk_words:
+    for word in junk:
         title = title.replace(word, "")
 
     title = re.sub(r"\(.*?\)", "", title)
     title = re.sub(r"\|.*", "", title)
-    title = title.replace("-", " ")
     title = re.sub(r"\s+", " ", title)
 
     return title.strip().title()
 
-# ---------- YOUTUBE SEARCH ----------
-def search_youtube(query):
-
+# ---------- Playlist Search ----------
+def search_album(query):
     ydl_opts = {
         "quiet": True,
-        "skip_download": True,
-        "extract_flat": "in_playlist",
-        "default_search": "ytsearch10",
-        "source_address": "0.0.0.0"
+        "extract_flat": True,
+        "skip_download": True
     }
 
+    search_query = f"ytsearch1:{query} full album jukebox official"
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch10:{query}", download=False)
-        return info.get("entries", [])
+        info = ydl.extract_info(search_query, download=False)
 
-# ---------- MAIN ----------
+        if not info or "entries" not in info:
+            return []
+
+        first = info["entries"][0]
+
+        # If playlist found
+        if "entries" in first:
+            return first["entries"][:10]
+
+        return []
+
+# ---------- Telegram Handler ----------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text.strip()
+    query = update.message.text.strip()
 
-    if user_id not in seen_users:
-        seen_users.add(user_id)
-        await update.message.reply_text(
-            "👋 Welcome to Tamil Music Bot\n\n"
-            "Type movie or song name to get the MP3 files 🎧"
-        )
+    await update.message.reply_text("🔍 Finding movie album...")
 
-    await update.message.reply_text("🔍 Finding movie songs...")
-
-    query = f"{text} tamil movie song"
-
-    results = search_youtube(query)
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, lambda: search_album(query))
 
     if not results:
-        await update.message.reply_text("❌ No songs found.")
+        await update.message.reply_text("❌ Album not found.")
         return
 
     buttons = []
 
     for video in results:
         raw_title = video.get("title", "Unknown")
-        title = clean_title(raw_title)
         video_id = video.get("id")
+
+        title = clean_title(raw_title)
 
         buttons.append([
             InlineKeyboardButton(
-                text=f"🎵 {title[:35]}",
+                text=f"🎵 {title}",
                 callback_data=f"download|{video_id}"
             )
         ])
@@ -86,9 +86,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# ---------- RUN ----------
+# ---------- Run Bot ----------
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-print("🎧 Tamil Music Bot Running...")
+print("🎧 Tamil Album Bot Running...")
 app.run_polling()
