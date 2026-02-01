@@ -1,19 +1,16 @@
-import os
 import asyncio
+import os
 import re
+import yt_dlp
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
-import yt_dlp
 
-# ======================
-# BOT TOKEN (Railway ENV)
-# ======================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# ======================
-# CLEAN TITLE FUNCTION
-# ======================
+seen_users = set()
+
+# ---------- TITLE CLEANER ----------
 def clean_title(title: str):
     title = title.lower()
 
@@ -28,36 +25,47 @@ def clean_title(title: str):
 
     title = re.sub(r"\(.*?\)", "", title)
     title = re.sub(r"\|.*", "", title)
+
     title = title.replace("-", " ")
     title = re.sub(r"\s+", " ", title)
 
     return title.strip().title()
 
-# ======================
-# YOUTUBE SEARCH
-# ======================
+# ---------- YOUTUBE SEARCH ----------
 async def search_youtube(query):
     ydl_opts = {
         "quiet": True,
-        "extract_flat": True,
         "skip_download": True,
+        "extract_flat": True,
+        "default_search": "ytsearch5"
     }
 
-    def _search():
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch8:{query}", download=False)
-            return info.get("entries", [])
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(query, download=False)
+        return info.get("entries", [])
+
+# ---------- MAIN HANDLER ----------
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    # Welcome message once
+    if user_id not in seen_users:
+        seen_users.add(user_id)
+        await update.message.reply_text(
+            "👋 Welcome to Tamil Music Bot\n\n"
+            "Type movie or song name to get the MP3 files 🎧"
+        )
+
+    await update.message.reply_text("🔍 Finding movie songs...")
+
+    query = f"{text} tamil movie song"
 
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _search)
-
-# ======================
-# MESSAGE HANDLER
-# ======================
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.message.text.strip()
-
-    results = await search_youtube(query)
+    results = await loop.run_in_executor(
+        None,
+        lambda: asyncio.run(search_youtube(query))
+    )
 
     if not results:
         await update.message.reply_text("❌ No songs found.")
@@ -67,14 +75,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for video in results:
         raw_title = video.get("title", "Unknown")
+        title = clean_title(raw_title)
         video_id = video.get("id")
-
-        clean = clean_title(raw_title)
 
         buttons.append([
             InlineKeyboardButton(
-                text=f"🎵 {clean}",
-                callback_data=f"yt|{video_id}"
+                text=f"🎵 {title[:35]}",
+                callback_data=f"download|{video_id}"
             )
         ])
 
@@ -85,9 +92,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# ======================
-# BOT START
-# ======================
+# ---------- APP START ----------
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
