@@ -1,5 +1,5 @@
 import os, re, asyncio, yt_dlp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaAudio
 from telegram.ext import ApplicationBuilder, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -10,24 +10,20 @@ def clean_title(title):
     for word in junk: title = title.replace(word, "")
     return re.sub(r"[\(\[].*?[\)\]]", "", title).strip().title()
 
-def smart_search(query):
-    ydl_opts = {"quiet": True, "extract_flat": True, "skip_download": True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch10:{query} songs", download=False)
-        return info["entries"] if info and "entries" in info else []
-
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
     await update.message.reply_text("🔍 Searching...")
     
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(None, lambda: smart_search(query))
+    ydl_opts = {"quiet": True, "extract_flat": True, "skip_download": True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(f"ytsearch10:{query} songs", download=False)
+        results = info["entries"][:10] if info and "entries" in info else []
     
     if not results:
         await update.message.reply_text("❌ No songs found.")
         return
     
-    buttons = [[InlineKeyboardButton(text=f"🎵 {clean_title(v.get('title','Unknown'))[:40]}", callback_data=f"d|{v.get('id')}")] for v in results[:10]]
+    buttons = [[InlineKeyboardButton(text=f"🎵 {clean_title(v.get('title','Unknown'))[:40]}", callback_data=f"d|{v.get('id')}")] for v in results]
     await update.message.reply_text("🎶 Select song:", reply_markup=InlineKeyboardMarkup(buttons))
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -35,52 +31,35 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("d|"):
         video_id = query.data.split("|")[1]
         await query.answer()
-        
-        # NEW STATUS MESSAGE (list stays!)
-        status_msg = await query.message.reply_text("🔄 Downloading audio... ⏳")
+        status_msg = await query.message.reply_text("🔄 Getting audio...")
         
         try:
-            # NO FFMPEG - Direct audio download
+            # DIRECT AUDIO STREAM - NO FFMPEG NEEDED!
             ydl_opts = {
-                'format': 'bestaudio/best[acodec=m4a]/bestaudio',
-                'outtmpl': 'song.%(ext)s',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',  # Railway has this
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '128',  # Lower quality = faster
-                }],
+                'format': 'bestaudio/best',
+                'noplaylist': True,
             }
             
-            loop = asyncio.get_event_loop()
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await loop.run_in_executor(None, lambda: ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=True))
+                info = ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=False)
+                audio_url = info['url']
+                title = info.get('title', 'Song')
             
-            # Find audio file
-            audio_file = None
-            for f in os.listdir('.'):
-                if f.startswith('song') and f.endswith(('.mp3', '.m4a', '.webm')):
-                    audio_file = f
-                    break
+            await status_msg.edit_text("🎵 Streaming song...")
+            await query.message.reply_audio(
+                audio=audio_url,
+                title=title[:100],
+                performer="Tamil Music Bot",
+                caption=f"🎵 {title[:50]}",
+                duration=info.get('duration', 0)
+            )
+            await status_msg.delete()
             
-            if audio_file and os.path.exists(audio_file):
-                await status_msg.edit_text("🎵 Sending song...")
-                with open(audio_file, 'rb') as audio:
-                    await query.message.reply_audio(
-                        audio=audio,
-                        title=info.get('title', 'Tamil Hit'),
-                        performer="Tamil Music Bot",
-                        caption=f"🎵 {info.get('title', 'Song')[:50]}"
-                    )
-                os.remove(audio_file)
-                await status_msg.edit_text("✅ Delivered! 🎉")
-            else:
-                await status_msg.edit_text("❌ No audio file found!")
-                
         except Exception as e:
-            await status_msg.edit_text(f"❌ Error: {str(e)[:100]}\nTry another song!")
+            await status_msg.edit_text(f"❌ Error: {str(e)[:100]}")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 app.add_handler(CallbackQueryHandler(handle_callback))
-print("🎧 Tamil Music Bot LIVE!")
+print("🎧 Tamil Music Bot LIVE - NO FFMPEG!")
 app.run_polling()
