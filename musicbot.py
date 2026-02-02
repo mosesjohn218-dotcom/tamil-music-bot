@@ -36,17 +36,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         video_id = query.data.split("|")[1]
         await query.answer()
         
-        # SEND NEW MESSAGE - DON'T EDIT (KEEPS LIST!)
-        status_msg = await query.message.reply_text("🔄 Downloading MP3... Please wait ⏳")
+        # NEW STATUS MESSAGE (list stays!)
+        status_msg = await query.message.reply_text("🔄 Downloading audio... ⏳")
         
         try:
+            # NO FFMPEG - Direct audio download
             ydl_opts = {
-                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'format': 'bestaudio/best[acodec=m4a]/bestaudio',
                 'outtmpl': 'song.%(ext)s',
                 'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
+                    'key': 'FFmpegExtractAudio',  # Railway has this
                     'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredquality': '128',  # Lower quality = faster
                 }],
             }
             
@@ -54,29 +55,29 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = await loop.run_in_executor(None, lambda: ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=True))
             
-            # Find MP3 file
-            mp3_file = None
+            # Find audio file
+            audio_file = None
             for f in os.listdir('.'):
-                if f.endswith('.mp3') and f.startswith('song'):
-                    mp3_file = f
+                if f.startswith('song') and f.endswith(('.mp3', '.m4a', '.webm')):
+                    audio_file = f
                     break
             
-            if mp3_file and os.path.exists(mp3_file):
+            if audio_file and os.path.exists(audio_file):
                 await status_msg.edit_text("🎵 Sending song...")
-                with open(mp3_file, 'rb') as audio:
+                with open(audio_file, 'rb') as audio:
                     await query.message.reply_audio(
                         audio=audio,
                         title=info.get('title', 'Tamil Hit'),
                         performer="Tamil Music Bot",
-                        caption=f"🎵 {info.get('title', 'Song')}"
+                        caption=f"🎵 {info.get('title', 'Song')[:50]}"
                     )
-                os.remove(mp3_file)
-                await status_msg.edit_text("✅ Song delivered! 🎉")
+                os.remove(audio_file)
+                await status_msg.edit_text("✅ Delivered! 🎉")
             else:
-                await status_msg.edit_text("❌ MP3 not found. Try another song!")
+                await status_msg.edit_text("❌ No audio file found!")
                 
         except Exception as e:
-            await status_msg.edit_text(f"❌ Error: Try different song\n\n{str(e)[:100]}")
+            await status_msg.edit_text(f"❌ Error: {str(e)[:100]}\nTry another song!")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
