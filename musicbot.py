@@ -35,51 +35,48 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("d|"):
         video_id = query.data.split("|")[1]
         await query.answer()
-        await query.edit_message_text("🔄 Downloading MP3...")
         
-        # FIXED YDL OPTIONS
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': 'song.%(ext)s',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        }
-        
-        def download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=True)
-                return f"song.{info['ext']}" if info['ext'] != 'mp3' else 'song.mp3'
+        # SEND NEW MESSAGE - DON'T EDIT (KEEPS LIST!)
+        status_msg = await query.message.reply_text("🔄 Downloading MP3... Please wait ⏳")
         
         try:
+            ydl_opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'outtmpl': 'song.%(ext)s',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+            }
+            
             loop = asyncio.get_event_loop()
-            filename = await loop.run_in_executor(None, download)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = await loop.run_in_executor(None, lambda: ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=True))
             
             # Find MP3 file
             mp3_file = None
             for f in os.listdir('.'):
-                if f.endswith('.mp3'):
+                if f.endswith('.mp3') and f.startswith('song'):
                     mp3_file = f
                     break
             
             if mp3_file and os.path.exists(mp3_file):
-                await query.edit_message_text("🎵 Sending MP3...")
+                await status_msg.edit_text("🎵 Sending song...")
                 with open(mp3_file, 'rb') as audio:
                     await query.message.reply_audio(
-                        audio=audio, 
-                        title="Tamil Hit",
-                        performer="Music Bot",
-                        caption=f"🎵 Downloaded from YouTube"
+                        audio=audio,
+                        title=info.get('title', 'Tamil Hit'),
+                        performer="Tamil Music Bot",
+                        caption=f"🎵 {info.get('title', 'Song')}"
                     )
                 os.remove(mp3_file)
-                await query.message.reply_text("✅ Song delivered!")
+                await status_msg.edit_text("✅ Song delivered! 🎉")
             else:
-                await query.message.reply_text("❌ MP3 conversion failed!")
+                await status_msg.edit_text("❌ MP3 not found. Try another song!")
                 
         except Exception as e:
-            await query.message.reply_text(f"❌ Error: {str(e)}")
+            await status_msg.edit_text(f"❌ Error: Try different song\n\n{str(e)[:100]}")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
