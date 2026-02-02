@@ -37,30 +37,52 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         await query.edit_message_text("🔄 Downloading MP3...")
         
+        # FIXED YDL OPTIONS
         ydl_opts = {
             'format': 'bestaudio/best',
-            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-            'outtmpl': '%(title)s.%(ext)s'
+            'outtmpl': 'song.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
         }
         
         def download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=True)
-        
-        info = await asyncio.get_event_loop().run_in_executor(None, download)
-        filename = f"{info['title']}.mp3"
+                info = ydl.extract_info(f"https://youtube.com/watch?v={video_id}", download=True)
+                return f"song.{info['ext']}" if info['ext'] != 'mp3' else 'song.mp3'
         
         try:
-            with open(filename, 'rb') as audio:
-                await query.message.reply_audio(audio=audio, caption=f"🎵 {info.get('title')}")
-            os.remove(filename)
-            await query.message.reply_text("✅ Delivered!")
+            loop = asyncio.get_event_loop()
+            filename = await loop.run_in_executor(None, download)
+            
+            # Find MP3 file
+            mp3_file = None
+            for f in os.listdir('.'):
+                if f.endswith('.mp3'):
+                    mp3_file = f
+                    break
+            
+            if mp3_file and os.path.exists(mp3_file):
+                await query.edit_message_text("🎵 Sending MP3...")
+                with open(mp3_file, 'rb') as audio:
+                    await query.message.reply_audio(
+                        audio=audio, 
+                        title="Tamil Hit",
+                        performer="Music Bot",
+                        caption=f"🎵 Downloaded from YouTube"
+                    )
+                os.remove(mp3_file)
+                await query.message.reply_text("✅ Song delivered!")
+            else:
+                await query.message.reply_text("❌ MP3 conversion failed!")
+                
         except Exception as e:
             await query.message.reply_text(f"❌ Error: {str(e)}")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-app.add_handler(CallbackQueryHandler(handle_callback))  # ONLY ONE HANDLER!
+app.add_handler(CallbackQueryHandler(handle_callback))
 print("🎧 Tamil Music Bot LIVE!")
 app.run_polling()
-
