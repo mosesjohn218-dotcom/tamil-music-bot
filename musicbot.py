@@ -55,10 +55,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_audio(audio=audio, caption=f"🎵 {info.get('title')}")
             os.remove(filename)
             await query.message.reply_text("✅ Delivered!")
-        except: await query.message.reply_text("❌ Error sending.")
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error: {str(e)}")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-app.add_handler(CallbackQueryHandler(handle_callback))
+app.add_handler(CallbackQueryHandler(handle_callback))  # ONLY ONE HANDLER!
 print("🎧 Tamil Music Bot LIVE!")
 app.run_polling()
+
