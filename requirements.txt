@@ -1,7 +1,7 @@
-python-telegram-bot==20.7
-pip install -r
-yt-dlp==2024.12.30
-ffmpeg-python
-
+pyrogram==2.0.106
+TgCrypto==1.2.5
+yt-dlp==2025.12.29  # Latest stable as of Feb 2026
+hachoir==3.1.2
+ffmpeg-python==0.2.0
 
 
